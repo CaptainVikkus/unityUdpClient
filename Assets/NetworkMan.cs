@@ -8,13 +8,20 @@ using System.Net;
 
 public class NetworkMan : MonoBehaviour
 {
+    [SerializeField]
+    private GameObject cube;
+
+    private List<GameObject> players = new List<GameObject>();
+    private List<string> spawnIDs = new List<string>();
+    private List<string> cullIDs = new List<string>();
+
     public UdpClient udp;
     // Start is called before the first frame update
     void Start()
     {
         udp = new UdpClient();
         
-        udp.Connect("PUT_IP_ADDRESS_HERE",12345);
+        udp.Connect("localhost",12345);
 
         Byte[] sendBytes = Encoding.ASCII.GetBytes("connect");
       
@@ -32,12 +39,14 @@ public class NetworkMan : MonoBehaviour
 
     public enum commands{
         NEW_CLIENT,
-        UPDATE
+        UPDATE,
+        LOST_CLIENT
     };
     
     [Serializable]
     public class Message{
         public commands cmd;
+        public string[] player;
     }
     
     [Serializable]
@@ -82,9 +91,23 @@ public class NetworkMan : MonoBehaviour
         try{
             switch(latestMessage.cmd){
                 case commands.NEW_CLIENT:
+                    // Debug.Log(latestMessage.player[0]);   Add new players from list of ids
+                    foreach (string id in latestMessage.player)
+                    {
+                        Debug.Log("Add ID: " + id);
+                        spawnIDs.Add(id);
+                    }
                     break;
                 case commands.UPDATE:
                     lastestGameState = JsonUtility.FromJson<GameState>(returnData);
+                    break;
+                case commands.LOST_CLIENT:
+                    Debug.Log(latestMessage.player.ToString());
+                    foreach (string id in latestMessage.player)
+                    {
+                        Debug.Log("Cull ID: " + id);
+                        cullIDs.Add(id);
+                    }
                     break;
                 default:
                     Debug.Log("Error");
@@ -100,17 +123,61 @@ public class NetworkMan : MonoBehaviour
     }
 
     void SpawnPlayers(){
-
+        foreach (string id in spawnIDs)
+        {
+            if (id != null)
+            {
+                float x = UnityEngine.Random.Range(-10.0f, 10.0f);
+                float y = UnityEngine.Random.Range(-10.0f, 10.0f);
+                float z = UnityEngine.Random.Range(-10.0f, 10.0f);
+                Vector3 spawnPoint = new Vector3(x, y, z);
+                GameObject player = Instantiate(cube, spawnPoint, new Quaternion());
+                player.GetComponent<IDScript>().address = id;
+                players.Add(player);
+            }
+        }
+        spawnIDs.Clear();
     }
 
     void UpdatePlayers(){
+        foreach (GameObject p in players)
+        {
+            IDScript playID = p.GetComponent<IDScript>();
+            foreach (Player p2 in lastestGameState.players)
+            {
+                if (playID.address == p2.id)
+                {
+                    playID.color.r = p2.color.R;
+                    playID.color.g = p2.color.G;
+                    playID.color.b = p2.color.B;
 
+                    p.GetComponent<Renderer>().material.SetColor("_Color", playID.color);
+                    break;
+                }
+            }
+        }
     }
 
-    void DestroyPlayers(){
-
+    void DestroyPlayers()
+    {
+        foreach (string id in cullIDs)
+        {
+            if (id != null)
+            {
+                foreach (GameObject p in players)
+                {
+                    if (id == p.GetComponent<IDScript>().address)
+                    {
+                        players.Remove(p);
+                        Destroy(p);
+                        break;
+                    }
+                }
+            }
+        }
+        cullIDs.Clear();
     }
-    
+
     void HeartBeat(){
         Byte[] sendBytes = Encoding.ASCII.GetBytes("heartbeat");
         udp.Send(sendBytes, sendBytes.Length);
