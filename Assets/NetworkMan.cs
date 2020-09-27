@@ -21,7 +21,7 @@ public class NetworkMan : MonoBehaviour
     {
         udp = new UdpClient();
         
-        udp.Connect("localhost",12345);
+        udp.Connect("3.22.224.12", 12345);
 
         Byte[] sendBytes = Encoding.ASCII.GetBytes("connect");
       
