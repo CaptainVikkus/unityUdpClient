@@ -5,5 +5,6 @@ using UnityEngine;
 public class IDScript : MonoBehaviour
 {
     public string address;
-    public Color color;
+    public bool local;
+    public Vector3 position;
 }

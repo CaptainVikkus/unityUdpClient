@@ -5,17 +5,25 @@ using System;
 using System.Text;
 using System.Net.Sockets;
 using System.Net;
+using Unity.Networking.Transport;
+using UnityEngine.Networking;
+using System.Linq;
+using UnityEngine.UIElements;
 
+[System.Serializable]
 public class NetworkMan : MonoBehaviour
 {
     [SerializeField]
-    private GameObject cube;
+    private GameObject playerModel;
+    public GameObject localPlayer;
 
     private List<GameObject> players = new List<GameObject>();
     private List<string> spawnIDs = new List<string>();
     private List<string> cullIDs = new List<string>();
 
     public UdpClient udp;
+    public float updatePerSecond = 30;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -29,7 +37,7 @@ public class NetworkMan : MonoBehaviour
 
         udp.BeginReceive(new AsyncCallback(OnReceived), udp);
 
-        InvokeRepeating("HeartBeat", 1, 1);
+        InvokeRepeating("HeartBeat", 1, 1/updatePerSecond);
     }
 
     void OnDestroy(){
@@ -46,19 +54,33 @@ public class NetworkMan : MonoBehaviour
     [Serializable]
     public class Message{
         public commands cmd;
-        public string[] player;
+        public Player[] player;
     }
     
     [Serializable]
     public class Player{
         [Serializable]
-        public struct receivedColor{
-            public float R;
-            public float G;
-            public float B;
+        public struct Position{
+            public float X;
+            public float Y;
+            public float Z;
         }
+        public int hearbeat;
         public string id;
-        public receivedColor color;        
+        public Position position;        
+    }
+
+    [Serializable]
+    public class Heartbeat
+    {        
+        public struct Position
+        {
+            public float X;
+            public float Y;
+            public float Z;
+        }
+        public int heartbeat = 1;
+        public Position position;
     }
 
     [Serializable]
@@ -92,10 +114,10 @@ public class NetworkMan : MonoBehaviour
             switch(latestMessage.cmd){
                 case commands.NEW_CLIENT:
                     // Debug.Log(latestMessage.player[0]);   Add new players from list of ids
-                    foreach (string id in latestMessage.player)
+                    foreach (Player player in latestMessage.player)
                     {
-                        Debug.Log("Add ID: " + id);
-                        spawnIDs.Add(id);
+                        Debug.Log("Add ID: " + player.id);
+                        spawnIDs.Add(player.id);
                     }
                     break;
                 case commands.UPDATE:
@@ -103,10 +125,10 @@ public class NetworkMan : MonoBehaviour
                     break;
                 case commands.LOST_CLIENT:
                     Debug.Log(latestMessage.player.ToString());
-                    foreach (string id in latestMessage.player)
+                    foreach (Player player in latestMessage.player)
                     {
-                        Debug.Log("Cull ID: " + id);
-                        cullIDs.Add(id);
+                        Debug.Log("Cull ID: " + player.id);
+                        cullIDs.Add(player.id);
                     }
                     break;
                 default:
@@ -131,9 +153,13 @@ public class NetworkMan : MonoBehaviour
                 float y = UnityEngine.Random.Range(-10.0f, 10.0f);
                 float z = UnityEngine.Random.Range(-10.0f, 10.0f);
                 Vector3 spawnPoint = new Vector3(x, y, z);
-                GameObject player = Instantiate(cube, spawnPoint, new Quaternion());
+                GameObject player = Instantiate(playerModel, spawnPoint, new Quaternion());
+                player.GetComponent<Renderer>().material.SetColor("_Color", new Color(x/10, y/10, z/10));
                 player.GetComponent<IDScript>().address = id;
                 players.Add(player);
+                player.GetComponent<PlayerController>().networkMan = this;
+                localPlayer = player;
+                Debug.Log("Added New Player with ID: " + id);
             }
         }
         spawnIDs.Clear();
@@ -147,11 +173,11 @@ public class NetworkMan : MonoBehaviour
             {
                 if (playID.address == p2.id)
                 {
-                    playID.color.r = p2.color.R;
-                    playID.color.g = p2.color.G;
-                    playID.color.b = p2.color.B;
+                    playID.position.x = p2.position.X;
+                    playID.position.y = p2.position.Y;
+                    playID.position.z = p2.position.Z;
 
-                    p.GetComponent<Renderer>().material.SetColor("_Color", playID.color);
+                    p.transform.position = playID.position;
                     break;
                 }
             }
@@ -170,6 +196,7 @@ public class NetworkMan : MonoBehaviour
                     {
                         players.Remove(p);
                         Destroy(p);
+                        Debug.Log("Deleted Old Player with ID: " + id);
                         break;
                     }
                 }
@@ -178,8 +205,13 @@ public class NetworkMan : MonoBehaviour
         cullIDs.Clear();
     }
 
-    void HeartBeat(){
-        Byte[] sendBytes = Encoding.ASCII.GetBytes("heartbeat");
+    void HeartBeat() {
+        Heartbeat message = new Heartbeat();
+        message.position.X = localPlayer.transform.position.x;
+        message.position.Y = localPlayer.transform.position.y;
+        message.position.Z = localPlayer.transform.position.z;
+        string m = JsonUtility.ToJson(message);
+        Byte[] sendBytes = Encoding.ASCII.GetBytes(m);
         udp.Send(sendBytes, sendBytes.Length);
     }
 

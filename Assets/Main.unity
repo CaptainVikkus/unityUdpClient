@@ -327,10 +327,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f1ad586668d834644b8076c3e4f8466f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  cube: {fileID: 7330525468457181048, guid: a7309348502c10d45a844d6d9a7c35f0, type: 3}
+  playerModel: {fileID: 7330525468457181048, guid: a7309348502c10d45a844d6d9a7c35f0,
+    type: 3}
+  updatePerSecond: 30
   latestMessage:
     cmd: 0
-    id: 
+    player: []
   lastestGameState:
     players: []
 --- !u!4 &1858514411
