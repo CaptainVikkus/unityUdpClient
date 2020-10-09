@@ -15,24 +15,25 @@ public class NetworkMan : MonoBehaviour
 {
     [SerializeField]
     private GameObject playerModel;
-    public GameObject localPlayer;
+    public string localID;
+    private GameObject localPlayer;
 
     private List<GameObject> players = new List<GameObject>();
     private List<string> spawnIDs = new List<string>();
     private List<string> cullIDs = new List<string>();
 
     public UdpClient udp;
-    public float updatePerSecond = 30;
+    public float updatePerSecond = 60;
 
     // Start is called before the first frame update
     void Start()
     {
         udp = new UdpClient();
-        
+
         udp.Connect("3.22.224.12", 12345);
+        //udp.Connect("localhost", 12345);
 
         Byte[] sendBytes = Encoding.ASCII.GetBytes("connect");
-      
         udp.Send(sendBytes, sendBytes.Length);
 
         udp.BeginReceive(new AsyncCallback(OnReceived), udp);
@@ -48,13 +49,15 @@ public class NetworkMan : MonoBehaviour
     public enum commands{
         NEW_CLIENT,
         UPDATE,
-        LOST_CLIENT
+        LOST_CLIENT,
+        FIRST_COMMAND
     };
     
     [Serializable]
     public class Message{
         public commands cmd;
         public Player[] player;
+        public string myID;
     }
     
     [Serializable]
@@ -65,22 +68,17 @@ public class NetworkMan : MonoBehaviour
             public float Y;
             public float Z;
         }
-        public int hearbeat;
         public string id;
-        public Position position;        
+        public Position position;
     }
-
+    
     [Serializable]
     public class Heartbeat
-    {        
-        public struct Position
-        {
-            public float X;
-            public float Y;
-            public float Z;
-        }
+    {
         public int heartbeat = 1;
-        public Position position;
+        public float X;
+        public float Y;
+        public float Z;
     }
 
     [Serializable]
@@ -131,6 +129,15 @@ public class NetworkMan : MonoBehaviour
                         cullIDs.Add(player.id);
                     }
                     break;
+                case commands.FIRST_COMMAND:
+                    foreach (Player player in latestMessage.player)
+                    {
+                        Debug.Log("Add ID: " + player.id);
+                        localID = latestMessage.myID;
+                        spawnIDs.Add(player.id);
+                    }
+                    break;
+
                 default:
                     Debug.Log("Error");
                     break;
@@ -156,9 +163,13 @@ public class NetworkMan : MonoBehaviour
                 GameObject player = Instantiate(playerModel, spawnPoint, new Quaternion());
                 player.GetComponent<Renderer>().material.SetColor("_Color", new Color(x/10, y/10, z/10));
                 player.GetComponent<IDScript>().address = id;
-                players.Add(player);
                 player.GetComponent<PlayerController>().networkMan = this;
-                localPlayer = player;
+                players.Add(player);
+                if (id == localID)
+                {
+                    localPlayer = player;
+                    Debug.Log("Local Player with ID: " + id);
+                }
                 Debug.Log("Added New Player with ID: " + id);
             }
         }
@@ -207,10 +218,11 @@ public class NetworkMan : MonoBehaviour
 
     void HeartBeat() {
         Heartbeat message = new Heartbeat();
-        message.position.X = localPlayer.transform.position.x;
-        message.position.Y = localPlayer.transform.position.y;
-        message.position.Z = localPlayer.transform.position.z;
+        message.X = localPlayer.transform.position.x;
+        message.Y = localPlayer.transform.position.y;
+        message.Z = localPlayer.transform.position.z;
         string m = JsonUtility.ToJson(message);
+        Debug.Log("Sending: " + m);
         Byte[] sendBytes = Encoding.ASCII.GetBytes(m);
         udp.Send(sendBytes, sendBytes.Length);
     }
